@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Imperial Bank of Soyol Erden</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --gold: #c9a84c;
+    --gold-light: #e8c97a;
+    --gold-dim: #7a6030;
+    --ink: #0d0b08;
+    --parchment: #f5f0e8;
+    --surface: #1a1610;
+    --surface2: #221e16;
+    --border: rgba(201,168,76,0.25);
+    --border-strong: rgba(201,168,76,0.5);
+    --red: #8b1a1a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--ink);
+    color: var(--parchment);
+    font-family: 'Crimson Text', Georgia, serif;
+    font-size: 17px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(201,168,76,0.015) 2px,rgba(201,168,76,0.015) 4px);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .wrap { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 0 1.5rem 4rem; }
+  header { text-align: center; padding: 3rem 0 2rem; border-bottom: 1px solid var(--border-strong); margin-bottom: 2rem; }
+  .emblem { font-size: 3rem; line-height: 1; color: var(--gold); margin-bottom: 0.5rem; letter-spacing: 0.2em; }
+  header h1 { font-family: 'Cinzel', serif; font-size: 1.6rem; font-weight: 700; color: var(--gold-light); letter-spacing: 0.08em; text-transform: uppercase; }
+  header p { font-size: 0.95rem; color: var(--gold-dim); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 0.3rem; }
+  .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 2rem; overflow: hidden; }
+  .stat { background: var(--surface); padding: 1rem 1.25rem; text-align: center; }
+  .stat-label { font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--gold-dim); margin-bottom: 4px; }
+  .stat-val { font-family: 'Cinzel', serif; font-size: 1.4rem; color: var(--gold-light); }
+  #lock-screen { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; padding: 2rem; text-align: center; margin-bottom: 2rem; }
+  #lock-screen h2 { font-family: 'Cinzel', serif; font-size: 1rem; color: var(--gold); letter-spacing: 0.1em; margin-bottom: 1rem; }
+  .lock-row { display: flex; gap: 8px; justify-content: center; max-width: 340px; margin: 0 auto; }
+  .err-msg { color: #c97a7a; font-size: 0.85rem; margin-top: 0.5rem; min-height: 1.2em; }
+  #mint-panel { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; padding: 1.5rem; margin-bottom: 2rem; display: none; }
+  #mint-panel h2 { font-family: 'Cinzel', serif; font-size: 1rem; color: var(--gold); letter-spacing: 0.1em; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; }
+  .lock-btn { font-size: 0.75rem; cursor: pointer; letter-spacing: 0.1em; text-transform: uppercase; background: none; border: 1px solid var(--border); padding: 3px 10px; border-radius: 3px; font-family: 'Cinzel', serif; color: var(--gold-dim); }
+  .lock-btn:hover { border-color: var(--border-strong); color: var(--gold); }
+  .mint-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); }
+  input, select { background: var(--surface2); border: 1px solid var(--border); color: var(--parchment); font-family: 'Crimson Text', serif; font-size: 15px; padding: 7px 10px; border-radius: 3px; outline: none; transition: border-color 0.15s; }
+  input:focus, select:focus { border-color: var(--gold); }
+  input::placeholder { color: rgba(245,240,232,0.3); }
+  select option { background: var(--surface2); }
+  button.primary { background: var(--gold); color: var(--ink); border: none; font-family: 'Cinzel', serif; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 9px 20px; border-radius: 3px; cursor: pointer; transition: background 0.15s, transform 0.1s; white-space: nowrap; }
+  button.primary:hover { background: var(--gold-light); }
+  button.primary:active { transform: scale(0.98); }
+  button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .mint-feedback { font-size: 0.85rem; margin-top: 0.75rem; min-height: 1.3em; color: var(--gold-dim); font-style: italic; }
+  .mint-feedback.ok { color: #6dbf7f; }
+  .mint-feedback.err { color: #c97a7a; }
+  .ledger-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: 10px; }
+  .ledger-head h2 { font-family: 'Cinzel', serif; font-size: 1rem; color: var(--gold); letter-spacing: 0.1em; }
+  .ledger-controls { display: flex; gap: 8px; }
+  #search-input { width: 200px; }
+  button.ghost { background: none; border: 1px solid var(--border); color: var(--gold-dim); font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 7px 14px; border-radius: 3px; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+  button.ghost:hover { border-color: var(--gold); color: var(--gold); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  thead tr { border-bottom: 1px solid var(--border-strong); }
+  th { font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); padding: 8px 10px; text-align: left; font-weight: 400; }
+  td { padding: 9px 10px; border-bottom: 1px solid rgba(201,168,76,0.08); vertical-align: middle; }
+  tr:hover td { background: rgba(201,168,76,0.04); }
+  .mono { font-family: 'Courier New', monospace; font-size: 12px; color: var(--gold-light); letter-spacing: 0.05em; }
+  .badge { display: inline-block; font-size: 10px; font-family: 'Cinzel', serif; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 8px; border-radius: 2px; }
+  .badge.active { background: rgba(109,191,127,0.15); color: #6dbf7f; border: 1px solid rgba(109,191,127,0.3); }
+  .badge.voided { background: rgba(139,26,26,0.2); color: #c97a7a; border: 1px solid rgba(139,26,26,0.3); }
+  .void-btn { background: none; border: 1px solid rgba(139,26,26,0.4); color: #c97a7a; font-size: 10px; font-family: 'Cinzel', serif; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 2px; cursor: pointer; transition: background 0.15s; }
+  .void-btn:hover { background: rgba(139,26,26,0.2); }
+  .loading-msg { text-align: center; padding: 2rem; color: var(--gold-dim); font-style: italic; }
+  footer { text-align: center; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="emblem">ᠰ</div>
+    <h1>Imperial Bank of Soyol Erden</h1>
+    <p>Central Issuing Authority · Imperial Confederacy</p>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Notes Issued</div><div class="stat-val" id="stat-total">—</div></div>
+    <div class="stat"><div class="stat-label">ERD in Circulation</div><div class="stat-val" id="stat-erd">—</div></div>
+    <div class="stat"><div class="stat-label">Voided Notes</div><div class="stat-val" id="stat-voided">—</div></div>
+  </div>
+
+  <div id="lock-screen">
+    <h2>Imperial Treasury — Authorised Access Only</h2>
+    <div class="lock-row">
+      <input type="password" id="pw-input" placeholder="Enter passphrase" style="flex:1" onkeydown="if(event.key==='Enter')tryUnlock()" />
+      <button class="primary" onclick="tryUnlock()">Unlock</button>
+    </div>
+    <div class="err-msg" id="pw-err"></div>
+  </div>
+
+  <div id="mint-panel">
+    <h2>Issue New Note <button class="lock-btn" onclick="lock()">Lock Treasury</button></h2>
+    <div class="mint-row">
+      <div class="field">
+        <label>Denomination</label>
+        <select id="denom">
+          <option value="1">1 ERD</option>
+          <option value="10">10 ERD</option>
+          <option value="100" selected>100 ERD</option>
+          <option value="500">500 ERD</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1;min-width:140px">
+        <label>Issued To (player)</label>
+        <input type="text" id="player" placeholder="e.g. Steve" />
+      </div>
+      <div class="field" style="width:70px">
+        <label>Qty</label>
+        <input type="number" id="qty" value="1" min="1" max="50" />
+      </div>
+      <button class="primary" id="mint-btn" onclick="issueNotes()">Mint Notes</button>
+    </div>
+    <div class="mint-feedback" id="mint-feedback"></div>
+  </div>
+
+  <div>
+    <div class="ledger-head">
+      <h2>The Grand Ledger</h2>
+      <div class="ledger-controls">
+        <input type="text" id="search-input" placeholder="Search serial or player…" oninput="filterLedger()" />
+        <button class="ghost" onclick="exportCSV()">Export CSV</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Serial Number</th><th>ERD</th><th>Issued To</th><th>Date</th><th>Status</th><th></th></tr></thead>
+        <tbody id="ledger-body"><tr><td colspan="6" class="loading-msg">Loading ledger…</td></tr></tbody>
+      </table>
+      <div id="ledger-empty" style="display:none;text-align:center;padding:3rem;color:var(--gold-dim);font-style:italic">No notes found.</div>
+    </div>
+  </div>
+
+  <footer>Imperial Confederacy of Soyol Erden &nbsp;·&nbsp; All rights reserved</footer>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://eyozeforjscsvbllzthk.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_WwakUlWHLIc3n7OkbsHtIw_ON5ZPJ9J';
+const PASSWORD = '1234!';
+const TABLE = 'erd_notes';
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let allNotes = [];
+let unlocked = false;
+let counter = 1;
+
+function tryUnlock() {
+  if (document.getElementById('pw-input').value === PASSWORD) {
+    unlocked = true;
+    document.getElementById('lock-screen').style.display = 'none';
+    document.getElementById('mint-panel').style.display = 'block';
+    document.getElementById('pw-err').textContent = '';
+    renderLedger();
+  } else {
+    document.getElementById('pw-err').textContent = 'Incorrect passphrase.';
+    document.getElementById('pw-input').value = '';
+  }
+}
+
+function lock() {
+  unlocked = false;
+  document.getElementById('mint-panel').style.display = 'none';
+  document.getElementById('lock-screen').style.display = 'block';
+  document.getElementById('pw-input').value = '';
+  renderLedger();
+}
+
+function pad(n, len) { return String(n).padStart(len, '0'); }
+
+function genSerial(denom) {
+  const prefix = {1:'SE-I',10:'SE-X',100:'SE-C',500:'SE-D'}[denom] || 'SE-?';
+  const year = new Date().getFullYear();
+  const seq = pad(counter++, 4);
+  const rand = pad(Math.floor(Math.random() * 9000) + 1000, 4);
+  return `${prefix}-${year}-${seq}-${rand}`;
+}
+
+async function loadNotes() {
+  const { data, error } = await sb.from(TABLE).select('*').order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('ledger-body').innerHTML = `<tr><td colspan="6" class="loading-msg" style="color:#c97a7a">Error: ${error.message}</td></tr>`;
+    return;
+  }
+  allNotes = data || [];
+  if (allNotes.length) {
+    const maxSeq = allNotes.reduce((max, n) => {
+      const parts = n.serial.split('-');
+      const seq = parseInt(parts[3]) || 0;
+      return Math.max(max, seq);
+    }, 0);
+    counter = maxSeq + 1;
+  }
+  updateStats();
+  renderLedger();
+}
+
+async function issueNotes() {
+  const denom = parseInt(document.getElementById('denom').value);
+  const player = document.getElementById('player').value.trim();
+  const qty = Math.min(50, Math.max(1, parseInt(document.getElementById('qty').value) || 1));
+  const fb = document.getElementById('mint-feedback');
+  if (!player) { fb.className = 'mint-feedback err'; fb.textContent = 'Player name is required.'; return; }
+  document.getElementById('mint-btn').disabled = true;
+  fb.className = 'mint-feedback'; fb.textContent = 'Minting…';
+  const today = new Date().toISOString().split('T')[0];
+  const rows = [];
+  for (let i = 0; i < qty; i++) rows.push({ serial: genSerial(denom), denom, player, issued_date: today, status: 'active' });
+  const { error } = await sb.from(TABLE).insert(rows);
+  document.getElementById('mint-btn').disabled = false;
+  if (error) { fb.className = 'mint-feedback err'; fb.textContent = 'Error: ' + error.message; return; }
+  fb.className = 'mint-feedback ok';
+  fb.textContent = qty === 1 ? `Issued: ${rows[0].serial}` : `Issued ${qty} notes · ${rows[0].serial} … ${rows[qty-1].serial}`;
+  document.getElementById('player').value = '';
+  document.getElementById('qty').value = '1';
+  await loadNotes();
+}
+
+async function voidNote(id) {
+  await sb.from(TABLE).update({ status: 'voided' }).eq('id', id);
+  await loadNotes();
+}
+
+function updateStats() {
+  const active = allNotes.filter(n => n.status === 'active');
+  const voided = allNotes.filter(n => n.status === 'voided');
+  document.getElementById('stat-total').textContent = allNotes.length.toLocaleString();
+  document.getElementById('stat-erd').textContent = active.reduce((a, n) => a + n.denom, 0).toLocaleString();
+  document.getElementById('stat-voided').textContent = voided.length.toLocaleString();
+}
+
+function filterLedger() { renderLedger(); }
+
+function renderLedger() {
+  const q = (document.getElementById('search-input').value || '').toLowerCase();
+  const filtered = allNotes.filter(n => !q || n.serial.toLowerCase().includes(q) || n.player.toLowerCase().includes(q));
+  const empty = document.getElementById('ledger-empty');
+  const body = document.getElementById('ledger-body');
+  if (!filtered.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  body.innerHTML = filtered.slice(0, 200).map(n => {
+    const badge = n.status === 'active' ? `<span class="badge active">Active</span>` : `<span class="badge voided">Voided</span>`;
+    const action = (unlocked && n.status === 'active') ? `<button class="void-btn" onclick="voidNote('${n.id}')">Void</button>` : '';
+    return `<tr><td class="mono">${n.serial}</td><td style="font-family:'Cinzel',serif;color:var(--gold-light)">${n.denom}</td><td>${n.player}</td><td style="color:var(--gold-dim);font-size:13px">${n.issued_date||''}</td><td>${badge}</td><td>${action}</td></tr>`;
+  }).join('');
+}
+
+function exportCSV() {
+  if (!allNotes.length) return;
+  const rows = [['Serial','ERD','Player','Date','Status'], ...allNotes.map(n => [n.serial,n.denom,n.player,n.issued_date,n.status])];
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.map(r => r.join(',')).join('\n'));
+  a.download = 'soyol_erden_ledger.csv';
+  a.click();
+}
+
+loadNotes();
+</script>
+</body>
+</html>
