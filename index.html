@@ -38,7 +38,6 @@
   }
   .wrap { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 0 1.5rem 4rem; }
   header { text-align: center; padding: 3rem 0 2rem; border-bottom: 1px solid var(--border-strong); margin-bottom: 2rem; }
-  .emblem { font-size: 3rem; line-height: 1; color: var(--gold); margin-bottom: 0.5rem; letter-spacing: 0.2em; }
   header h1 { font-family: 'Cinzel', serif; font-size: 1.6rem; font-weight: 700; color: var(--gold-light); letter-spacing: 0.08em; text-transform: uppercase; }
   header p { font-size: 0.95rem; color: var(--gold-dim); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 0.3rem; }
   .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 2rem; overflow: hidden; }
@@ -92,8 +91,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="emblem">ᠰ</div>
-    <h1>Imperial Bank of Soyol Erden</h1>
+        <h1>Imperial Bank of Soyol Erden</h1>
     <p>Central Issuing Authority · Imperial Confederacy</p>
   </header>
 
@@ -150,7 +148,7 @@
       <thead><tr><th>Commodity</th><th>Rate (per 1 ERD)</th><th>Last Updated</th><th></th></tr></thead>
       <tbody id="rates-body"></tbody>
     </table>
-    <div id="rate-add-row" style="display:none;margin-top:10px;display:none">
+    <div id="rate-add-row" style="display:none;margin-top:10px">
       <div class="mint-row" style="margin-top:10px">
         <div class="field" style="flex:2"><label>Commodity</label><input type="text" id="rate-name" placeholder="e.g. Emerald" /></div>
         <div class="field" style="flex:1"><label>Rate</label><input type="number" id="rate-val" placeholder="0.00" step="0.0001" min="0.0001" /></div>
@@ -251,6 +249,7 @@ function addRate() {
 }
 
 // ── Auth ──
+function tryUnlock() {
   if (document.getElementById('pw-input').value === PASSWORD) {
     unlocked = true;
     document.getElementById('lock-screen').style.display = 'none';
