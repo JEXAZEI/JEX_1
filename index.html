@@ -183,7 +183,7 @@
 <script>
 const SUPABASE_URL = 'https://eyozeforjscsvbllzthk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_WwakUlWHLIc3n7OkbsHtIw_ON5ZPJ9J';
-const PASSWORD = '1234!';
+const PASSWORD = 'MFPARKWAY';
 const TABLE = 'erd_notes';
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -354,8 +354,11 @@ function renderLedger() {
 
 async function resetData() {
   if (!confirm('Delete ALL notes from the ledger? This cannot be undone.')) return;
-  const { error } = await sb.from(TABLE).delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  if (error) { alert('Reset failed: ' + error.message); return; }
+  const ids = allNotes.map(n => n.id);
+  if (ids.length) {
+    const { error } = await sb.from(TABLE).delete().in('id', ids);
+    if (error) { alert('Reset failed: ' + error.message); return; }
+  }
   try { localStorage.removeItem('erd_rates'); localStorage.removeItem('erd_diamond_rate'); } catch(e){}
   diamondRate = 1;
   marketRates = [];
