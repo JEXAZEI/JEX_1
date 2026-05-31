@@ -165,6 +165,7 @@
       <div class="ledger-controls">
         <input type="text" id="search-input" placeholder="Search serial or player…" oninput="filterLedger()" />
         <button class="ghost" onclick="exportCSV()">Export CSV</button>
+        <button class="ghost" id="reset-btn" onclick="resetData()" style="display:none;border-color:rgba(139,26,26,0.4);color:#c97a7a">Reset All Data</button>
       </div>
     </div>
     <div class="table-wrap">
@@ -256,6 +257,7 @@ function tryUnlock() {
     document.getElementById('mint-panel').style.display = 'block';
     document.getElementById('pw-err').textContent = '';
     renderLedger(); renderRates();
+    document.getElementById('reset-btn').style.display='inline-block';
   } else {
     document.getElementById('pw-err').textContent = 'Incorrect passphrase.';
     document.getElementById('pw-input').value = '';
@@ -268,6 +270,7 @@ function lock() {
   document.getElementById('lock-screen').style.display = 'block';
   document.getElementById('pw-input').value = '';
   renderLedger(); renderRates();
+  document.getElementById('reset-btn').style.display='none';
 }
 
 function pad(n, len) { return String(n).padStart(len, '0'); }
@@ -348,6 +351,18 @@ function renderLedger() {
     return `<tr><td class="mono">${n.serial}</td><td style="font-family:'Cinzel',serif;color:var(--gold-light)">${n.denom}</td><td>${n.player}</td><td style="color:var(--gold-dim);font-size:13px">${n.issued_date||''}</td><td>${badge}</td><td>${action}</td></tr>`;
   }).join('');
 }
+
+async function resetData() {
+  if (!confirm('Delete ALL notes from the ledger? This cannot be undone.')) return;
+  const { error } = await sb.from(TABLE).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  if (error) { alert('Reset failed: ' + error.message); return; }
+  try { localStorage.removeItem('erd_rates'); localStorage.removeItem('erd_diamond_rate'); } catch(e){}
+  diamondRate = 1;
+  marketRates = [];
+  await loadNotes();
+  renderRates();
+}
+
 
 function exportCSV() {
   if (!allNotes.length) return;
