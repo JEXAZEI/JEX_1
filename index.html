@@ -128,9 +128,12 @@
 
   <div id="lock-screen">
     <h2>Imperial Treasury — Authorised Access Only</h2>
-    <div class="lock-row">
-      <input type="password" id="pw-input" placeholder="Enter passphrase" style="flex:1" onkeydown="if(event.key==='Enter')tryUnlock()" />
-      <button class="primary" onclick="tryUnlock()">Unlock</button>
+    <div class="lock-row" style="flex-direction:column">
+      <input type="email" id="pw-email" placeholder="Admin email" autocomplete="username" onkeydown="if(event.key==='Enter')tryUnlock()" />
+      <div style="display:flex;gap:8px">
+        <input type="password" id="pw-input" placeholder="Password" autocomplete="current-password" style="flex:1" onkeydown="if(event.key==='Enter')tryUnlock()" />
+        <button class="primary" id="unlock-btn" onclick="tryUnlock()">Unlock</button>
+      </div>
     </div>
     <div class="err-msg" id="pw-err"></div>
   </div>
@@ -249,8 +252,12 @@
 <script>
 const SUPABASE_URL = 'https://eyozeforjscsvbllzthk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_WwakUlWHLIc3n7OkbsHtIw_ON5ZPJ9J';
-const PASSWORD = '1234!';
 const TABLE = 'erd_notes';
+const RATES_TABLE = 'erd_rates';
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -262,8 +269,14 @@ let counter = 1;
 let diamondRate = 1;
 let marketRates = [];
 
-function saveRates() { try { localStorage.setItem('erd_rates', JSON.stringify(marketRates)); } catch(e){} }
-function loadRates() { try { const r = localStorage.getItem('erd_rates'); if(r) marketRates = JSON.parse(r); } catch(e){} }
+async function loadRates() {
+  const { data, error } = await sb.from(RATES_TABLE).select('*').order('name');
+  if (error) { console.error('loadRates:', error.message); return; }
+  const rows = data || [];
+  const anchor = rows.find(r => r.is_anchor);
+  diamondRate = anchor ? Number(anchor.rate) : 1;
+  marketRates = rows.filter(r => !r.is_anchor);
+}
 
 function renderRates() {
   const diamond = { name: 'Diamond', rate: diamondRate };
@@ -279,65 +292,89 @@ function renderRates() {
              <input type="number" value="${r.rate}" step="0.0001" min="0.0001" style="width:80px;font-size:12px" onchange="updateDiamond(this.value)" />
            </div>`
         : `<div style="display:flex;gap:6px;align-items:center">
-             <input type="number" value="${r.rate}" step="0.0001" min="0.0001" style="width:80px;font-size:12px" onchange="updateRate(${i-1},this.value)" />
-             <button class="void-btn" onclick="removeRate(${i-1})">×</button>
+             <input type="number" value="${r.rate}" step="0.0001" min="0.0001" style="width:80px;font-size:12px" onchange="updateRate('${r.id}',this.value)" />
+             <button class="void-btn" onclick="removeRate('${r.id}')">×</button>
            </div>`
       : `<span style="color:var(--gold-dim);font-size:13px">${r.rate}</span>`;
+    const updatedStr = r.updated_at ? new Date(r.updated_at).toLocaleDateString() : (isD ? 'Default 1:1' : 'Not set');
     return `<tr>
-      <td style="font-family:'Cinzel',serif;font-size:13px">${r.name}</td>
+      <td style="font-family:'Cinzel',serif;font-size:13px">${escapeHtml(r.name)}</td>
       <td>${editCell}</td>
-      <td style="color:var(--gold-dim);font-size:12px">${r.updated || (isD ? 'Default 1:1' : 'Not set')}</td>
+      <td style="color:var(--gold-dim);font-size:12px">${escapeHtml(updatedStr)}</td>
       <td>${badge}</td>
     </tr>`;
   }).join('');
   document.getElementById('rate-controls').style.display = unlocked ? 'block' : 'none';
 }
 
-function updateRate(i, val) {
-  marketRates[i].rate = parseFloat(val);
-  marketRates[i].updated = new Date().toLocaleDateString();
-  saveRates(); renderRates();
+async function updateRate(id, val) {
+  const rate = parseFloat(val);
+  if (!(rate > 0)) { renderRates(); return; }
+  const { error } = await sb.from(RATES_TABLE).update({ rate, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) alert('Update failed: ' + error.message);
+  await loadRates(); renderRates();
 }
-function removeRate(i) { marketRates.splice(i,1); saveRates(); renderRates(); }
-function updateDiamond(val) {
-  diamondRate = parseFloat(val) || 1;
-  try { localStorage.setItem('erd_diamond_rate', diamondRate); } catch(e){}
-  renderRates();
+async function removeRate(id) {
+  const { error } = await sb.from(RATES_TABLE).delete().eq('id', id);
+  if (error) alert('Remove failed: ' + error.message);
+  await loadRates(); renderRates();
 }
-function addRate() {
+async function updateDiamond(val) {
+  const rate = parseFloat(val) || 1;
+  const { error } = await sb.from(RATES_TABLE).update({ rate, updated_at: new Date().toISOString() }).eq('is_anchor', true);
+  if (error) alert('Update failed: ' + error.message);
+  await loadRates(); renderRates();
+}
+async function addRate() {
   const name = document.getElementById('rate-name').value.trim();
   const val = parseFloat(document.getElementById('rate-val').value);
   if (!name || !val) return;
-  marketRates.push({ name, rate: val, updated: new Date().toLocaleDateString() });
+  const { error } = await sb.from(RATES_TABLE).insert({ name, rate: val, is_anchor: false, updated_at: new Date().toISOString() });
+  if (error) { alert('Add failed: ' + error.message); return; }
   document.getElementById('rate-name').value = '';
   document.getElementById('rate-val').value = '';
   document.getElementById('rate-add-row').style.display = 'none';
-  saveRates(); renderRates();
+  await loadRates(); renderRates();
 }
 
 // ── Auth ──
-function tryUnlock() {
-  if (document.getElementById('pw-input').value === PASSWORD) {
-    unlocked = true;
-    document.getElementById('lock-screen').style.display = 'none';
-    document.getElementById('mint-panel').style.display = 'block';
-    document.getElementById('pw-err').textContent = '';
-    renderLedger(); renderRates();
-    document.getElementById('reset-btn').style.display='inline-block';
-  } else {
-    document.getElementById('pw-err').textContent = 'Incorrect passphrase.';
+// Real Supabase Auth: the "unlocked" state mirrors whether we hold an
+// authenticated session. Row Level Security on the server (see
+// supabase/rls_policies.sql) is what actually gates writes; this only
+// controls what the UI shows.
+async function tryUnlock() {
+  const email = document.getElementById('pw-email').value.trim();
+  const password = document.getElementById('pw-input').value;
+  const errEl = document.getElementById('pw-err');
+  errEl.textContent = '';
+  const btn = document.getElementById('unlock-btn');
+  btn.disabled = true;
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false;
+  if (error) {
+    errEl.textContent = 'Incorrect credentials.';
     document.getElementById('pw-input').value = '';
   }
 }
 
-function lock() {
-  unlocked = false;
-  document.getElementById('mint-panel').style.display = 'none';
-  document.getElementById('lock-screen').style.display = 'block';
-  document.getElementById('pw-input').value = '';
-  renderLedger(); renderRates();
-  document.getElementById('reset-btn').style.display='none';
+async function lock() {
+  await sb.auth.signOut();
 }
+
+sb.auth.onAuthStateChange((_event, session) => {
+  const nowUnlocked = !!session;
+  if (nowUnlocked === unlocked) return;
+  unlocked = nowUnlocked;
+  document.getElementById('lock-screen').style.display = unlocked ? 'none' : 'block';
+  document.getElementById('mint-panel').style.display = unlocked ? 'block' : 'none';
+  document.getElementById('reset-btn').style.display = unlocked ? 'inline-block' : 'none';
+  if (unlocked) {
+    document.getElementById('pw-err').textContent = '';
+    document.getElementById('pw-email').value = '';
+    document.getElementById('pw-input').value = '';
+  }
+  renderLedger(); renderRates();
+});
 
 function pad(n, len) { return String(n).padStart(len, '0'); }
 
@@ -429,7 +466,7 @@ function filterLedger() { renderLedger(); }
 
 function renderLedger() {
   const q = (document.getElementById('search-input').value || '').toLowerCase();
-  const filtered = allNotes.filter(n => !q || n.serial.toLowerCase().includes(q) || n.player.toLowerCase().includes(q));
+  const filtered = allNotes.filter(n => !q || (n.serial||'').toLowerCase().includes(q) || (n.player||'').toLowerCase().includes(q));
   const empty = document.getElementById('ledger-empty');
   const body = document.getElementById('ledger-body');
   if (!filtered.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
@@ -437,7 +474,7 @@ function renderLedger() {
   body.innerHTML = filtered.slice(0, 200).map(n => {
     const badge = n.status === 'active' ? `<span class="badge active">Active</span>` : `<span class="badge voided">Voided</span>`;
     const action = (unlocked && n.status === 'active') ? `<button class="void-btn" onclick="voidNote('${n.id}')">Void</button>` : '';
-    return `<tr><td class="mono">${n.serial}</td><td style="font-family:'Cinzel',serif;color:var(--gold-light)">${n.denom}</td><td>${n.player}</td><td style="color:var(--gold-dim);font-size:13px">${n.issued_date||''}</td><td>${badge}</td><td>${action}</td></tr>`;
+    return `<tr><td class="mono">${escapeHtml(n.serial)}</td><td style="font-family:'Cinzel',serif;color:var(--gold-light)">${escapeHtml(n.denom)}</td><td>${escapeHtml(n.player)}</td><td style="color:var(--gold-dim);font-size:13px">${escapeHtml(n.issued_date)}</td><td>${badge}</td><td>${action}</td></tr>`;
   }).join('');
 }
 
@@ -448,10 +485,15 @@ async function resetData() {
     const { error } = await sb.from(TABLE).delete().in('id', ids);
     if (error) { alert('Reset failed: ' + error.message); return; }
   }
-  try { localStorage.removeItem('erd_rates'); localStorage.removeItem('erd_diamond_rate'); } catch(e){}
-  diamondRate = 1;
-  marketRates = [];
+  const marketIds = marketRates.map(r => r.id);
+  if (marketIds.length) {
+    const { error } = await sb.from(RATES_TABLE).delete().in('id', marketIds);
+    if (error) { alert('Rate reset failed: ' + error.message); return; }
+  }
+  const { error: anchorErr } = await sb.from(RATES_TABLE).update({ rate: 1, updated_at: new Date().toISOString() }).eq('is_anchor', true);
+  if (anchorErr) { alert('Rate reset failed: ' + anchorErr.message); return; }
   await loadNotes();
+  await loadRates();
   renderRates();
 }
 
@@ -489,8 +531,7 @@ function exportCSV() {
 }
 
 (async () => {
-  try { const d = localStorage.getItem('erd_diamond_rate'); if(d) diamondRate = parseFloat(d); } catch(e){}
-  loadRates();
+  await loadRates();
   await loadNotes();
   renderRates();
 })();
