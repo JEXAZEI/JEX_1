@@ -128,9 +128,12 @@
 
   <div id="lock-screen">
     <h2>Imperial Treasury — Authorised Access Only</h2>
-    <div class="lock-row">
-      <input type="password" id="pw-input" placeholder="Enter passphrase" style="flex:1" onkeydown="if(event.key==='Enter')tryUnlock()" />
-      <button class="primary" onclick="tryUnlock()">Unlock</button>
+    <div class="lock-row" style="flex-direction:column">
+      <input type="email" id="pw-email" placeholder="Admin email" autocomplete="username" onkeydown="if(event.key==='Enter')tryUnlock()" />
+      <div style="display:flex;gap:8px">
+        <input type="password" id="pw-input" placeholder="Password" autocomplete="current-password" style="flex:1" onkeydown="if(event.key==='Enter')tryUnlock()" />
+        <button class="primary" id="unlock-btn" onclick="tryUnlock()">Unlock</button>
+      </div>
     </div>
     <div class="err-msg" id="pw-err"></div>
   </div>
@@ -249,13 +252,7 @@
 <script>
 const SUPABASE_URL = 'https://eyozeforjscsvbllzthk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_WwakUlWHLIc3n7OkbsHtIw_ON5ZPJ9J';
-const PASSWORD_HASH = '6cbefd8960d511540f34779628ef4e5a55b758d3be5749cd8878a09b348c052b';
 const TABLE = 'erd_notes';
-
-async function sha256Hex(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -325,29 +322,41 @@ function addRate() {
 }
 
 // ── Auth ──
+// Real Supabase Auth: the "unlocked" state mirrors whether we hold an
+// authenticated session. Row Level Security on the server (see
+// supabase/rls_policies.sql) is what actually gates writes; this only
+// controls what the UI shows.
 async function tryUnlock() {
-  const hash = await sha256Hex(document.getElementById('pw-input').value);
-  if (hash === PASSWORD_HASH) {
-    unlocked = true;
-    document.getElementById('lock-screen').style.display = 'none';
-    document.getElementById('mint-panel').style.display = 'block';
-    document.getElementById('pw-err').textContent = '';
-    renderLedger(); renderRates();
-    document.getElementById('reset-btn').style.display='inline-block';
-  } else {
-    document.getElementById('pw-err').textContent = 'Incorrect passphrase.';
+  const email = document.getElementById('pw-email').value.trim();
+  const password = document.getElementById('pw-input').value;
+  const errEl = document.getElementById('pw-err');
+  errEl.textContent = '';
+  const btn = document.getElementById('unlock-btn');
+  btn.disabled = true;
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false;
+  if (error) {
+    errEl.textContent = 'Incorrect credentials.';
     document.getElementById('pw-input').value = '';
   }
 }
 
-function lock() {
-  unlocked = false;
-  document.getElementById('mint-panel').style.display = 'none';
-  document.getElementById('lock-screen').style.display = 'block';
-  document.getElementById('pw-input').value = '';
-  renderLedger(); renderRates();
-  document.getElementById('reset-btn').style.display='none';
+async function lock() {
+  await sb.auth.signOut();
 }
+
+sb.auth.onAuthStateChange((_event, session) => {
+  unlocked = !!session;
+  document.getElementById('lock-screen').style.display = unlocked ? 'none' : 'block';
+  document.getElementById('mint-panel').style.display = unlocked ? 'block' : 'none';
+  document.getElementById('reset-btn').style.display = unlocked ? 'inline-block' : 'none';
+  if (unlocked) {
+    document.getElementById('pw-err').textContent = '';
+    document.getElementById('pw-email').value = '';
+    document.getElementById('pw-input').value = '';
+  }
+  renderLedger(); renderRates();
+});
 
 function pad(n, len) { return String(n).padStart(len, '0'); }
 
