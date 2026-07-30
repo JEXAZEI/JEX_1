@@ -253,6 +253,7 @@
 const SUPABASE_URL = 'https://eyozeforjscsvbllzthk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_WwakUlWHLIc3n7OkbsHtIw_ON5ZPJ9J';
 const TABLE = 'erd_notes';
+const RATES_TABLE = 'erd_rates';
 
 function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -268,8 +269,14 @@ let counter = 1;
 let diamondRate = 1;
 let marketRates = [];
 
-function saveRates() { try { localStorage.setItem('erd_rates', JSON.stringify(marketRates)); } catch(e){} }
-function loadRates() { try { const r = localStorage.getItem('erd_rates'); if(r) marketRates = JSON.parse(r); } catch(e){} }
+async function loadRates() {
+  const { data, error } = await sb.from(RATES_TABLE).select('*').order('name');
+  if (error) { console.error('loadRates:', error.message); return; }
+  const rows = data || [];
+  const anchor = rows.find(r => r.is_anchor);
+  diamondRate = anchor ? Number(anchor.rate) : 1;
+  marketRates = rows.filter(r => !r.is_anchor);
+}
 
 function renderRates() {
   const diamond = { name: 'Diamond', rate: diamondRate };
@@ -285,40 +292,49 @@ function renderRates() {
              <input type="number" value="${r.rate}" step="0.0001" min="0.0001" style="width:80px;font-size:12px" onchange="updateDiamond(this.value)" />
            </div>`
         : `<div style="display:flex;gap:6px;align-items:center">
-             <input type="number" value="${r.rate}" step="0.0001" min="0.0001" style="width:80px;font-size:12px" onchange="updateRate(${i-1},this.value)" />
-             <button class="void-btn" onclick="removeRate(${i-1})">×</button>
+             <input type="number" value="${r.rate}" step="0.0001" min="0.0001" style="width:80px;font-size:12px" onchange="updateRate('${r.id}',this.value)" />
+             <button class="void-btn" onclick="removeRate('${r.id}')">×</button>
            </div>`
       : `<span style="color:var(--gold-dim);font-size:13px">${r.rate}</span>`;
+    const updatedStr = r.updated_at ? new Date(r.updated_at).toLocaleDateString() : (isD ? 'Default 1:1' : 'Not set');
     return `<tr>
       <td style="font-family:'Cinzel',serif;font-size:13px">${escapeHtml(r.name)}</td>
       <td>${editCell}</td>
-      <td style="color:var(--gold-dim);font-size:12px">${escapeHtml(r.updated) || (isD ? 'Default 1:1' : 'Not set')}</td>
+      <td style="color:var(--gold-dim);font-size:12px">${escapeHtml(updatedStr)}</td>
       <td>${badge}</td>
     </tr>`;
   }).join('');
   document.getElementById('rate-controls').style.display = unlocked ? 'block' : 'none';
 }
 
-function updateRate(i, val) {
-  marketRates[i].rate = parseFloat(val);
-  marketRates[i].updated = new Date().toLocaleDateString();
-  saveRates(); renderRates();
+async function updateRate(id, val) {
+  const rate = parseFloat(val);
+  if (!(rate > 0)) { renderRates(); return; }
+  const { error } = await sb.from(RATES_TABLE).update({ rate, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) alert('Update failed: ' + error.message);
+  await loadRates(); renderRates();
 }
-function removeRate(i) { marketRates.splice(i,1); saveRates(); renderRates(); }
-function updateDiamond(val) {
-  diamondRate = parseFloat(val) || 1;
-  try { localStorage.setItem('erd_diamond_rate', diamondRate); } catch(e){}
-  renderRates();
+async function removeRate(id) {
+  const { error } = await sb.from(RATES_TABLE).delete().eq('id', id);
+  if (error) alert('Remove failed: ' + error.message);
+  await loadRates(); renderRates();
 }
-function addRate() {
+async function updateDiamond(val) {
+  const rate = parseFloat(val) || 1;
+  const { error } = await sb.from(RATES_TABLE).update({ rate, updated_at: new Date().toISOString() }).eq('is_anchor', true);
+  if (error) alert('Update failed: ' + error.message);
+  await loadRates(); renderRates();
+}
+async function addRate() {
   const name = document.getElementById('rate-name').value.trim();
   const val = parseFloat(document.getElementById('rate-val').value);
   if (!name || !val) return;
-  marketRates.push({ name, rate: val, updated: new Date().toLocaleDateString() });
+  const { error } = await sb.from(RATES_TABLE).insert({ name, rate: val, is_anchor: false, updated_at: new Date().toISOString() });
+  if (error) { alert('Add failed: ' + error.message); return; }
   document.getElementById('rate-name').value = '';
   document.getElementById('rate-val').value = '';
   document.getElementById('rate-add-row').style.display = 'none';
-  saveRates(); renderRates();
+  await loadRates(); renderRates();
 }
 
 // ── Auth ──
@@ -469,10 +485,15 @@ async function resetData() {
     const { error } = await sb.from(TABLE).delete().in('id', ids);
     if (error) { alert('Reset failed: ' + error.message); return; }
   }
-  try { localStorage.removeItem('erd_rates'); localStorage.removeItem('erd_diamond_rate'); } catch(e){}
-  diamondRate = 1;
-  marketRates = [];
+  const marketIds = marketRates.map(r => r.id);
+  if (marketIds.length) {
+    const { error } = await sb.from(RATES_TABLE).delete().in('id', marketIds);
+    if (error) { alert('Rate reset failed: ' + error.message); return; }
+  }
+  const { error: anchorErr } = await sb.from(RATES_TABLE).update({ rate: 1, updated_at: new Date().toISOString() }).eq('is_anchor', true);
+  if (anchorErr) { alert('Rate reset failed: ' + anchorErr.message); return; }
   await loadNotes();
+  await loadRates();
   renderRates();
 }
 
@@ -510,8 +531,7 @@ function exportCSV() {
 }
 
 (async () => {
-  try { const d = localStorage.getItem('erd_diamond_rate'); if(d) diamondRate = parseFloat(d); } catch(e){}
-  loadRates();
+  await loadRates();
   await loadNotes();
   renderRates();
 })();
