@@ -346,7 +346,9 @@ async function lock() {
 }
 
 sb.auth.onAuthStateChange((_event, session) => {
-  unlocked = !!session;
+  const nowUnlocked = !!session;
+  if (nowUnlocked === unlocked) return;
+  unlocked = nowUnlocked;
   document.getElementById('lock-screen').style.display = unlocked ? 'none' : 'block';
   document.getElementById('mint-panel').style.display = unlocked ? 'block' : 'none';
   document.getElementById('reset-btn').style.display = unlocked ? 'inline-block' : 'none';
@@ -448,7 +450,7 @@ function filterLedger() { renderLedger(); }
 
 function renderLedger() {
   const q = (document.getElementById('search-input').value || '').toLowerCase();
-  const filtered = allNotes.filter(n => !q || n.serial.toLowerCase().includes(q) || n.player.toLowerCase().includes(q));
+  const filtered = allNotes.filter(n => !q || (n.serial||'').toLowerCase().includes(q) || (n.player||'').toLowerCase().includes(q));
   const empty = document.getElementById('ledger-empty');
   const body = document.getElementById('ledger-body');
   if (!filtered.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
