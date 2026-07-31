@@ -535,6 +535,20 @@ function exportCSV() {
   await loadNotes();
   renderRates();
 })();
+
+// Live updates: reflect changes made from other tabs/admins without a manual refresh.
+// Requires the tables to be added to the supabase_realtime publication —
+// see supabase/realtime.sql.
+sb.channel('erd_notes_realtime')
+  .on('postgres_changes', { event: '*', schema: 'public', table: TABLE }, () => loadNotes())
+  .subscribe();
+
+sb.channel('erd_rates_realtime')
+  .on('postgres_changes', { event: '*', schema: 'public', table: RATES_TABLE }, async () => {
+    await loadRates();
+    renderRates();
+  })
+  .subscribe();
 </script>
 </body>
 </html>
