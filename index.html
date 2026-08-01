@@ -259,6 +259,12 @@ function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 }
 
+if (typeof supabase === 'undefined') {
+  document.getElementById('ledger-body').innerHTML = '<tr><td colspan="6" class="loading-msg" style="color:#c97a7a">Failed to load required library. Check your connection and refresh the page.</td></tr>';
+  document.getElementById('lock-screen').innerHTML = '<h2 style="color:#c97a7a">Unable to load banking system</h2><p style="color:var(--gold-dim);font-size:0.85rem;margin-top:0.5rem">A required script failed to load. Please refresh the page or check your connection.</p>';
+  throw new Error('supabase-js failed to load');
+}
+
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let allNotes = [];
@@ -349,11 +355,16 @@ async function tryUnlock() {
   errEl.textContent = '';
   const btn = document.getElementById('unlock-btn');
   btn.disabled = true;
-  const { error } = await sb.auth.signInWithPassword({ email, password });
-  btn.disabled = false;
-  if (error) {
-    errEl.textContent = 'Incorrect credentials.';
-    document.getElementById('pw-input').value = '';
+  try {
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      errEl.textContent = 'Incorrect credentials.';
+      document.getElementById('pw-input').value = '';
+    }
+  } catch (e) {
+    errEl.textContent = 'Login failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -530,11 +541,16 @@ function quickCalc(amt, from) {
   calcConvert();
 }
 
+function csvField(v) {
+  const s = String(v ?? '');
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
 function exportCSV() {
   if (!allNotes.length) return;
   const rows = [['Serial','ERD','Player','Date','Status'], ...allNotes.map(n => [n.serial,n.denom,n.player,n.issued_date,n.status])];
   const a = document.createElement('a');
-  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.map(r => r.join(',')).join('\n'));
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.map(r => r.map(csvField).join(',')).join('\n'));
   a.download = 'soyol_erden_ledger.csv';
   a.click();
 }
@@ -554,6 +570,10 @@ sb.channel('erd_notes_realtime')
 
 sb.channel('erd_rates_realtime')
   .on('postgres_changes', { event: '*', schema: 'public', table: RATES_TABLE }, async () => {
+    // Skip the refresh while an admin has focus inside this table (mid-edit) --
+    // a full re-render would wipe an uncommitted keystroke. It'll pick up the
+    // change on the next event once they've moved on.
+    if (document.getElementById('rates-body').contains(document.activeElement)) return;
     await loadRates();
     renderRates();
   })
