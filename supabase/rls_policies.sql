@@ -7,13 +7,12 @@
 -- no identity, so it can never satisfy these policies for writes.
 --
 -- To create the admin:
---   1. Supabase dashboard > Authentication > Users > Add user (email + password).
+--   1. Supabase dashboard > Authentication > Users > Add user (email + password,
+--      with "Auto Confirm User" checked).
 --   2. Run:  update auth.users set raw_app_meta_data =
 --              raw_app_meta_data || '{"role":"admin"}'::jsonb
 --            where email = 'your-admin@example.com';
---   3. In the app, replace the local sha256 passphrase check with
---      supabase.auth.signInWithPassword({ email, password }) so the client
---      actually holds an authenticated session before minting/voiding/resetting.
+-- The app already signs in via supabase.auth.signInWithPassword.
 
 alter table public.erd_notes enable row level security;
 
