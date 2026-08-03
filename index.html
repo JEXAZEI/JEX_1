@@ -326,7 +326,8 @@ async function removeRate(id) {
   await loadRates(); renderRates();
 }
 async function updateDiamond(val) {
-  const rate = parseFloat(val) || 1;
+  const rate = parseFloat(val);
+  if (!(rate > 0)) { renderRates(); return; }
   const { error } = await sb.from(RATES_TABLE).update({ rate, updated_at: new Date().toISOString() }).eq('is_anchor', true);
   if (error) alert('Update failed: ' + error.message);
   await loadRates(); renderRates();
@@ -461,7 +462,8 @@ function copyNote(id, text) {
 }
 
 async function voidNote(id) {
-  await sb.from(TABLE).update({ status: 'voided' }).eq('id', id);
+  const { error } = await sb.from(TABLE).update({ status: 'voided' }).eq('id', id);
+  if (error) { alert('Void failed: ' + error.message); return; }
   await loadNotes();
 }
 
